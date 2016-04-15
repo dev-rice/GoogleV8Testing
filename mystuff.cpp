@@ -40,21 +40,14 @@
  */
 using namespace v8;
 
-Local<Context> CreateShellContext(Isolate* isolate);
-void RunShell(Local<Context> context, Platform* platform);
 int RunMain(Isolate* isolate, Platform* platform, int argc,
             char* argv[]);
 bool ExecuteString(Isolate* isolate, Local<String> source,
                    Local<Value> name, bool print_result,
                    bool report_exceptions);
 void Print(const FunctionCallbackInfo<Value>& args);
-void Read(const FunctionCallbackInfo<Value>& args);
-void Load(const FunctionCallbackInfo<Value>& args);
-void Quit(const FunctionCallbackInfo<Value>& args);
-void Version(const FunctionCallbackInfo<Value>& args);
 MaybeLocal<String> ReadFile(Isolate* isolate, const char* name);
 void ReportException(Isolate* isolate, TryCatch* handler);
-static bool run_shell;
 
 class ShellArrayBufferAllocator : public ArrayBuffer::Allocator {
 public:
@@ -77,8 +70,6 @@ public:
     Point(int x, int y) : x_(x), y_(y) { }
     int x_, y_;
 };
-
-Local<Object> obj;
 
 void GetPointX(Local<String> property, const PropertyCallbackInfo<Value>& info) {
     Local<Object> self = info.Holder();
@@ -135,13 +126,26 @@ int main(int argc, char* argv[]) {
     Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = &array_buffer_allocator;
     Isolate* isolate = Isolate::New(create_params);
-    run_shell = (argc == 1);
+
     int result;
 
     {
         Isolate::Scope isolate_scope(isolate);
         HandleScope handle_scope(isolate);
-        Local<Context> context = CreateShellContext(isolate);
+
+        Local<ObjectTemplate> global = ObjectTemplate::New(isolate);
+        global->Set(String::NewFromUtf8(isolate, "print", NewStringType::kNormal).ToLocalChecked(), FunctionTemplate::New(isolate, Print));
+
+        global->SetAccessor(String::NewFromUtf8(isolate, "magic_number", NewStringType::kNormal).ToLocalChecked(), getMagicNumber, setMagicNumber);
+
+        global->SetInternalFieldCount(1);
+        global->SetAccessor(String::NewFromUtf8(isolate, "x", NewStringType::kNormal).ToLocalChecked(), GetPointX, SetPointX);
+        global->SetAccessor(String::NewFromUtf8(isolate, "y", NewStringType::kNormal).ToLocalChecked(), GetPointY, SetPointY);
+        // Point* p = new Point(1, 2);
+        // Local<Object> obj = global->NewInstance();
+        // obj->SetInternalField(0, External::New(isolate, p));
+
+        Local<Context> context = Context::New(isolate, NULL, global);;
         if (context.IsEmpty()) {
             fprintf(stderr, "Error creating context\n");
             return 1;
@@ -149,7 +153,6 @@ int main(int argc, char* argv[]) {
 
         Context::Scope context_scope(context);
         result = RunMain(isolate, platform, argc, argv);
-        if (run_shell) RunShell(context, platform);
     }
 
     isolate->Dispose();
@@ -163,38 +166,6 @@ const char* ToCString(const String::Utf8Value& value) {
     return *value ? *value : "<string conversion failed>";
 }
 
-// Creates a new execution environment containing the built-in
-// functions.
-Local<Context> CreateShellContext(Isolate* isolate) {
-    // Create a template for the global object.
-    Local<ObjectTemplate> global = ObjectTemplate::New(isolate);
-    // Bind the global 'print' function to the C++ Print callback.
-    global->Set(String::NewFromUtf8(isolate, "print", NewStringType::kNormal).ToLocalChecked(), FunctionTemplate::New(isolate, Print));
-
-    // Bind the global 'read' function to the C++ Read callback.
-    global->Set(String::NewFromUtf8(isolate, "read", NewStringType::kNormal).ToLocalChecked(),FunctionTemplate::New(isolate, Read));
-
-    // Bind the global 'load' function to the C++ Load callback.
-    global->Set(String::NewFromUtf8(isolate, "load", NewStringType::kNormal).ToLocalChecked(),FunctionTemplate::New(isolate, Load));
-
-    // Bind the 'quit' function
-    global->Set(String::NewFromUtf8(isolate, "quit", NewStringType::kNormal).ToLocalChecked(),FunctionTemplate::New(isolate, Quit));
-
-    // Bind the 'version' function
-    global->Set(String::NewFromUtf8(isolate, "version", NewStringType::kNormal).ToLocalChecked(),FunctionTemplate::New(isolate, Version));
-
-    global->SetAccessor(String::NewFromUtf8(isolate, "magic_number", NewStringType::kNormal).ToLocalChecked(), getMagicNumber, setMagicNumber);
-
-    global->SetInternalFieldCount(1);
-    global->SetAccessor(String::NewFromUtf8(isolate, "x", NewStringType::kNormal).ToLocalChecked(), GetPointX, SetPointX);
-    global->SetAccessor(String::NewFromUtf8(isolate, "y", NewStringType::kNormal).ToLocalChecked(), GetPointY, SetPointY);
-
-    Point* p = new Point(1, 2);
-    // obj = global->NewInstance();
-    // obj->SetInternalField(0, External::New(isolate, p));
-
-    return Context::New(isolate, NULL, global);
-}
 // The callback that is invoked by v8 whenever the JavaScript 'print'
 // function is called.  Prints its arguments on stdout separated by
 // spaces and ending with a newline.
@@ -213,64 +184,6 @@ void Print(const FunctionCallbackInfo<Value>& args) {
     }
     printf("\n");
     fflush(stdout);
-}
-// The callback that is invoked by v8 whenever the JavaScript 'read'
-// function is called.  This function loads the content of the file named in
-// the argument into a JavaScript string.
-void Read(const FunctionCallbackInfo<Value>& args) {
-    if (args.Length() != 1) {
-        args.GetIsolate()->ThrowException(String::NewFromUtf8(args.GetIsolate(), "Bad parameters", NewStringType::kNormal).ToLocalChecked());
-        return;
-    }
-
-    String::Utf8Value file(args[0]);
-    if (*file == NULL) {
-        args.GetIsolate()->ThrowException(String::NewFromUtf8(args.GetIsolate(), "Error loading file", NewStringType::kNormal).ToLocalChecked());
-        return;
-    }
-
-    Local<String> source;
-    if (!ReadFile(args.GetIsolate(), *file).ToLocal(&source)) {
-        args.GetIsolate()->ThrowException(String::NewFromUtf8(args.GetIsolate(), "Error loading file", NewStringType::kNormal).ToLocalChecked());
-        return;
-    }
-    args.GetReturnValue().Set(source);
-}
-// The callback that is invoked by v8 whenever the JavaScript 'load'
-// function is called.  Loads, compiles and executes its argument
-// JavaScript file.
-void Load(const FunctionCallbackInfo<Value>& args) {
-    for (int i = 0; i < args.Length(); i++) {
-        HandleScope handle_scope(args.GetIsolate());
-        String::Utf8Value file(args[i]);
-        if (*file == NULL) {
-            args.GetIsolate()->ThrowException(String::NewFromUtf8(args.GetIsolate(), "Error loading file", NewStringType::kNormal).ToLocalChecked());
-            return;
-        }
-
-        Local<String> source;
-        if (!ReadFile(args.GetIsolate(), *file).ToLocal(&source)) {
-            args.GetIsolate()->ThrowException(String::NewFromUtf8(args.GetIsolate(), "Error loading file", NewStringType::kNormal).ToLocalChecked());
-            return;
-        }
-        if (!ExecuteString(args.GetIsolate(), source, args[i], false, false)) {
-            args.GetIsolate()->ThrowException(String::NewFromUtf8(args.GetIsolate(), "Error executing file", NewStringType::kNormal).ToLocalChecked());
-            return;
-        }
-    }
-}
-// The callback that is invoked by v8 whenever the JavaScript 'quit'
-// function is called.  Quits.
-void Quit(const FunctionCallbackInfo<Value>& args) {
-    // If not arguments are given args[0] will yield undefined which
-    // converts to the integer value 0.
-    int exit_code = args[0]->Int32Value(args.GetIsolate()->GetCurrentContext()).FromMaybe(0);
-    fflush(stdout);
-    fflush(stderr);
-    exit(exit_code);
-}
-void Version(const FunctionCallbackInfo<Value>& args) {
-    args.GetReturnValue().Set(String::NewFromUtf8(args.GetIsolate(), V8::GetVersion(), NewStringType::kNormal).ToLocalChecked());
 }
 
 // Reads a file into a v8 string.
@@ -299,71 +212,27 @@ MaybeLocal<String> ReadFile(Isolate* isolate, const char* name) {
 int RunMain(Isolate* isolate, Platform* platform, int argc,
             char* argv[]) {
 
-    for (int i = 1; i < argc; i++) {
-        const char* str = argv[i];
-        if (strcmp(str, "--shell") == 0) {
-            run_shell = true;
-        } else if (strcmp(str, "-f") == 0) {
-            // Ignore any -f flags for compatibility with the other stand-
-            // alone JavaScript engines.
-            continue;
-        } else if (strncmp(str, "--", 2) == 0) {
-            fprintf(stderr,
-                  "Warning: unknown flag %s.\nTry --help for options\n", str);
-        } else if (strcmp(str, "-e") == 0 && i + 1 < argc) {
-            // Execute argument given to -e option directly.
-            Local<String> file_name =
-              String::NewFromUtf8(isolate, "unnamed", NewStringType::kNormal).ToLocalChecked();
-            Local<String> source;
-            if (!String::NewFromUtf8(isolate, argv[++i], NewStringType::kNormal).ToLocal(&source)) {
-
-                return 1;
-            }
-            bool success = ExecuteString(isolate, source, file_name, false, true);
-            while (platform::PumpMessageLoop(platform, isolate)) continue;
-            if (!success) return 1;
-        } else {
-            // Use all other arguments as names of files to load and run.
-            Local<String> file_name =
-              String::NewFromUtf8(isolate, str, NewStringType::kNormal)
-                  .ToLocalChecked();
-            Local<String> source;
-            if (!ReadFile(isolate, str).ToLocal(&source)) {
-                fprintf(stderr, "Error reading '%s'\n", str);
-                continue;
-            }
-            bool success = ExecuteString(isolate, source, file_name, false, true);
-            while (platform::PumpMessageLoop(platform, isolate)) continue;
-            if (!success) return 1;
+    // Use all other arguments as names of files to load and run.
+    if (argc > 2) {
+        printf("Nope\n");
+        return 0;
+    } else {
+        const char* str = argv[1];
+        Local<String> file_name =
+          String::NewFromUtf8(isolate, str, NewStringType::kNormal)
+              .ToLocalChecked();
+        Local<String> source;
+        if (!ReadFile(isolate, str).ToLocal(&source)) {
+            fprintf(stderr, "Error reading '%s'\n", str);
+            return 0;
         }
+        bool success = ExecuteString(isolate, source, file_name, false, true);
+        while (platform::PumpMessageLoop(platform, isolate)) continue;
+        if (!success) return 1;
     }
     return 0;
 }
-// The read-eval-execute loop of the shell.
-void RunShell(Local<Context> context, Platform* platform) {
-    fprintf(stderr, "V8 version %s [sample shell]\n", V8::GetVersion());
-    static const int kBufferSize = 256;
-    // Enter the execution environment before evaluating any code.
-    Context::Scope context_scope(context);
-    Local<String> name(String::NewFromUtf8(context->GetIsolate(), "(shell)", NewStringType::kNormal).ToLocalChecked());
 
-    while (true) {
-        char buffer[kBufferSize];
-        fprintf(stderr, "> ");
-        char* str = fgets(buffer, kBufferSize, stdin);
-        if (str == NULL) break;
-        HandleScope handle_scope(context->GetIsolate());
-        ExecuteString(
-            context->GetIsolate(),
-            String::NewFromUtf8(context->GetIsolate(), str, NewStringType::kNormal).ToLocalChecked(), name, true, true);
-
-        while (platform::PumpMessageLoop(platform, context->GetIsolate())){
-            continue;
-        }
-    }
-
-    fprintf(stderr, "\n");
-}
 // Executes a string within the current v8 context.
 bool ExecuteString(Isolate* isolate, Local<String> source,
                    Local<Value> name, bool print_result,
