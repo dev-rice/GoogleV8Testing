@@ -46,6 +46,7 @@ bool ExecuteString(Isolate* isolate, Local<String> source,
                    Local<Value> name, bool print_result,
                    bool report_exceptions);
 void Print(const FunctionCallbackInfo<Value>& args);
+void saySomethingCool(const FunctionCallbackInfo<Value>& args);
 MaybeLocal<String> ReadFile(Isolate* isolate, const char* name);
 void ReportException(Isolate* isolate, TryCatch* handler);
 
@@ -136,6 +137,8 @@ int main(int argc, char* argv[]) {
         Local<ObjectTemplate> global = ObjectTemplate::New(isolate);
         global->Set(String::NewFromUtf8(isolate, "print", NewStringType::kNormal).ToLocalChecked(), FunctionTemplate::New(isolate, Print));
 
+        global->Set(String::NewFromUtf8(isolate, "saySomethingCool", NewStringType::kNormal).ToLocalChecked(), FunctionTemplate::New(isolate, saySomethingCool));
+
         global->SetAccessor(String::NewFromUtf8(isolate, "magic_number", NewStringType::kNormal).ToLocalChecked(), getMagicNumber, setMagicNumber);
 
         global->SetInternalFieldCount(1);
@@ -183,6 +186,16 @@ void Print(const FunctionCallbackInfo<Value>& args) {
         printf("%s", cstr);
     }
     printf("\n");
+    fflush(stdout);
+}
+
+void saySomethingCool(const FunctionCallbackInfo<Value>& args) {
+    for (int i = 0; i < args.Length(); i++) {
+        HandleScope handle_scope(args.GetIsolate());
+        String::Utf8Value str(args[i]);
+        const char* cstr = ToCString(str);
+        printf("%s, those are cool\n", cstr);
+    }
     fflush(stdout);
 }
 

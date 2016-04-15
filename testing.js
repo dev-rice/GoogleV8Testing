@@ -5,3 +5,5 @@ function say_hi(name) {
 say_hi("Chris");
 magic_number = 20;
 say_hi("Maya");
+
+saySomethingCool("Video Games", "Apples", "Dolphins");
