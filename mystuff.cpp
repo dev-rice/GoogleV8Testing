@@ -83,7 +83,7 @@ void XGetter(Local<String> property, const PropertyCallbackInfo<Value>& info) {
 
 void XSetter(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info) {
 
-    // x = value->Int32Value();
+    x = value->Int32Value();
 }
 
 int main(int argc, char* argv[]) {
