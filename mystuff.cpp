@@ -72,19 +72,56 @@ public:
     }
 };
 
-// Global accessor stuff
-int x = 200;
+class Point {
+public:
+    Point(int x, int y) : x_(x), y_(y) { }
+    int x_, y_;
+};
 
-void XGetter(Local<String> property, const PropertyCallbackInfo<Value>& info);
-void XSetter(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info);
+Local<Object> obj;
 
-void XGetter(Local<String> property, const PropertyCallbackInfo<Value>& info) {
-    info.GetReturnValue().Set(x);
+void GetPointX(Local<String> property, const PropertyCallbackInfo<Value>& info) {
+    Local<Object> self = info.Holder();
+    Local<External> wrap = Local<External>::Cast(self->GetInternalField(0));
+    void* ptr = wrap->Value();
+    int value = static_cast<Point*>(ptr)->x_;
+    info.GetReturnValue().Set(value);
 }
 
-void XSetter(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info) {
+void SetPointX(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info) {
 
-    x = value->Int32Value();
+    Local<Object> self = info.Holder();
+    Local<External> wrap = Local<External>::Cast(self->GetInternalField(0));
+    void* ptr = wrap->Value();
+    static_cast<Point*>(ptr)->x_ = value->Int32Value();
+}
+
+void GetPointY(Local<String> property, const PropertyCallbackInfo<Value>& info) {
+    Local<Object> self = info.Holder();
+    Local<External> wrap = Local<External>::Cast(self->GetInternalField(0));
+    void* ptr = wrap->Value();
+    int value = static_cast<Point*>(ptr)->y_;
+    info.GetReturnValue().Set(value);
+}
+
+void SetPointY(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info) {
+
+    Local<Object> self = info.Holder();
+    Local<External> wrap = Local<External>::Cast(self->GetInternalField(0));
+    void* ptr = wrap->Value();
+    static_cast<Point*>(ptr)->y_ = value->Int32Value();
+}
+
+// Global accessor stuff
+int magic_number = 200;
+
+void getMagicNumber(Local<String> property, const PropertyCallbackInfo<Value>& info) {
+    info.GetReturnValue().Set(magic_number);
+}
+
+void setMagicNumber(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info) {
+
+    magic_number = value->Int32Value();
 }
 
 int main(int argc, char* argv[]) {
@@ -146,8 +183,15 @@ Local<Context> CreateShellContext(Isolate* isolate) {
     // Bind the 'version' function
     global->Set(String::NewFromUtf8(isolate, "version", NewStringType::kNormal).ToLocalChecked(),FunctionTemplate::New(isolate, Version));
 
-    global->SetAccessor(String::NewFromUtf8(isolate, "x", NewStringType::kNormal).ToLocalChecked(), XGetter, XSetter);
-    // global->SetAccessor(String::NewFromUtf8(isolate, "y"), &YGetter, &YSetter);
+    global->SetAccessor(String::NewFromUtf8(isolate, "magic_number", NewStringType::kNormal).ToLocalChecked(), getMagicNumber, setMagicNumber);
+
+    global->SetInternalFieldCount(1);
+    global->SetAccessor(String::NewFromUtf8(isolate, "x", NewStringType::kNormal).ToLocalChecked(), GetPointX, SetPointX);
+    global->SetAccessor(String::NewFromUtf8(isolate, "y", NewStringType::kNormal).ToLocalChecked(), GetPointY, SetPointY);
+
+    Point* p = new Point(1, 2);
+    // obj = global->NewInstance();
+    // obj->SetInternalField(0, External::New(isolate, p));
 
     return Context::New(isolate, NULL, global);
 }
