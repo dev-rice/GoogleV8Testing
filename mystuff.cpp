@@ -72,10 +72,11 @@ public:
     }
 };
 
+// Global accessor stuff
 int x = 200;
 
-static void XGetter(Local<String> property, const PropertyCallbackInfo<Value>& info);
-static void XSetter(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info);
+void XGetter(Local<String> property, const PropertyCallbackInfo<Value>& info);
+void XSetter(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info);
 
 void XGetter(Local<String> property, const PropertyCallbackInfo<Value>& info) {
     info.GetReturnValue().Set(x);
