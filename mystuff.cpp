@@ -47,6 +47,7 @@ bool ExecuteString(Isolate* isolate, Local<String> source,
                    bool report_exceptions);
 void Print(const FunctionCallbackInfo<Value>& args);
 void saySomethingCool(const FunctionCallbackInfo<Value>& args);
+void pointTimesTwoJs(const v8::FunctionCallbackInfo<v8::Value>& args);
 MaybeLocal<String> ReadFile(Isolate* isolate, const char* name);
 void ReportException(Isolate* isolate, TryCatch* handler);
 
@@ -70,6 +71,10 @@ class Point {
 public:
     Point(int x, int y) : x_(x), y_(y) { }
     int x_, y_;
+    void timesTwo() {
+        x_ = x_ * 2;
+        y_ = y_ * 2;
+    }
 };
 
 void GetPointX(Local<String> property, const PropertyCallbackInfo<Value>& info) {
@@ -104,6 +109,10 @@ void SetPointY(Local<String> property, Local<Value> value, const PropertyCallbac
     static_cast<Point*>(ptr)->y_ = value->Int32Value();
 }
 
+void pointTimesTwo(Point& point) {
+    point.timesTwo();
+}
+
 // Global accessor stuff
 int magic_number = 200;
 
@@ -135,16 +144,16 @@ int main(int argc, char* argv[]) {
         HandleScope handle_scope(isolate);
 
         Local<ObjectTemplate> global = ObjectTemplate::New(isolate);
-        global->Set(String::NewFromUtf8(isolate, "print", NewStringType::kNormal).ToLocalChecked(), FunctionTemplate::New(isolate, Print));
+        global->Set(String::NewFromUtf8(isolate, "print"), FunctionTemplate::New(isolate, Print));
 
-        global->Set(String::NewFromUtf8(isolate, "saySomethingCool", NewStringType::kNormal).ToLocalChecked(), FunctionTemplate::New(isolate, saySomethingCool));
+        global->Set(String::NewFromUtf8(isolate, "saySomethingCool"), FunctionTemplate::New(isolate, saySomethingCool));
 
-        global->SetAccessor(String::NewFromUtf8(isolate, "magic_number", NewStringType::kNormal).ToLocalChecked(), getMagicNumber, setMagicNumber);
-
+        global->SetAccessor(String::NewFromUtf8(isolate, "magic_number"), getMagicNumber, setMagicNumber);
 
         global->SetInternalFieldCount(1);
-        global->SetAccessor(String::NewFromUtf8(isolate, "x", NewStringType::kNormal).ToLocalChecked(), GetPointX, SetPointX);
-        global->SetAccessor(String::NewFromUtf8(isolate, "y", NewStringType::kNormal).ToLocalChecked(), GetPointY, SetPointY);
+        global->SetAccessor(String::NewFromUtf8(isolate, "x"), GetPointX, SetPointX);
+        global->SetAccessor(String::NewFromUtf8(isolate, "y"), GetPointY, SetPointY);
+        global->Set(String::NewFromUtf8(isolate, "timesTwo"), FunctionTemplate::New(isolate, pointTimesTwoJs));
 
         Local<Context> context = Context::New(isolate, NULL, global);
         if (context.IsEmpty()) {
@@ -156,8 +165,9 @@ int main(int argc, char* argv[]) {
 
         Point* p = new Point(100, 2);
         Local<Object> obj = global->NewInstance();
-        obj->SetInternalField(0, External::New(isolate, p));
-        context->Global()->Set(String::NewFromUtf8(isolate, "point", NewStringType::kNormal).ToLocalChecked(), obj);
+        Local<External> obj_ptr = External::New(isolate, p);
+        obj->SetInternalField(0, obj_ptr);
+        context->Global()->Set(String::NewFromUtf8(isolate, "point"), obj);
 
         result = RunMain(isolate, platform, argc, argv);
     }
@@ -201,6 +211,38 @@ void saySomethingCool(const FunctionCallbackInfo<Value>& args) {
         printf("%s, those are cool\n", cstr);
     }
     fflush(stdout);
+}
+
+Point unpack_point(Isolate * isolate, const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Point point(0, 0);
+  Handle<Object> point_obj = Handle<Object>::Cast(args[0]);
+  Handle<Value> point_x =
+                point_obj->Get(String::NewFromUtf8(isolate,"x"));
+  Handle<Value> point_y =
+                point_obj->Get(String::NewFromUtf8(isolate,"y"));
+  point.x_ = point_x->NumberValue();
+  point.y_ = point_y->NumberValue();
+
+  return point;
+}
+
+void pointTimesTwoJs(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+
+  Point p = unpack_point(isolate, args);
+  pointTimesTwo(p);
+
+  // Creates a new Object on the V8 heap
+  Local<Object> obj = Object::New(isolate);
+
+  // Transfers the data from result, to obj (see below)
+  obj->Set(String::NewFromUtf8(isolate, "x"),
+                            Number::New(isolate, p.x_));
+  obj->Set(String::NewFromUtf8(isolate, "y"),
+                            Number::New(isolate, p.y_));
+
+  // Return the object
+  args.GetReturnValue().Set(obj);
 }
 
 // Reads a file into a v8 string.

@@ -9,3 +9,5 @@ say_hi("Maya");
 saySomethingCool("Video Games", "Apples", "Dolphins");
 
 print("Point: " + "x = " + point.x + ", y = " + point.y);
+var point2 = timesTwo(point);
+print("Point: " + "x = " + point2.x + ", y = " + point2.y);
