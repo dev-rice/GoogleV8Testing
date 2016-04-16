@@ -141,20 +141,24 @@ int main(int argc, char* argv[]) {
 
         global->SetAccessor(String::NewFromUtf8(isolate, "magic_number", NewStringType::kNormal).ToLocalChecked(), getMagicNumber, setMagicNumber);
 
+
         global->SetInternalFieldCount(1);
         global->SetAccessor(String::NewFromUtf8(isolate, "x", NewStringType::kNormal).ToLocalChecked(), GetPointX, SetPointX);
         global->SetAccessor(String::NewFromUtf8(isolate, "y", NewStringType::kNormal).ToLocalChecked(), GetPointY, SetPointY);
-        // Point* p = new Point(1, 2);
-        // Local<Object> obj = global->NewInstance();
-        // obj->SetInternalField(0, External::New(isolate, p));
 
-        Local<Context> context = Context::New(isolate, NULL, global);;
+        Local<Context> context = Context::New(isolate, NULL, global);
         if (context.IsEmpty()) {
             fprintf(stderr, "Error creating context\n");
             return 1;
         }
 
         Context::Scope context_scope(context);
+
+        Point* p = new Point(100, 2);
+        Local<Object> obj = global->NewInstance();
+        obj->SetInternalField(0, External::New(isolate, p));
+        context->Global()->Set(String::NewFromUtf8(isolate, "point", NewStringType::kNormal).ToLocalChecked(), obj);
+
         result = RunMain(isolate, platform, argc, argv);
     }
 

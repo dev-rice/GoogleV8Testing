@@ -7,3 +7,5 @@ magic_number = 20;
 say_hi("Maya");
 
 saySomethingCool("Video Games", "Apples", "Dolphins");
+
+print("Point: " + "x = " + point.x + ", y = " + point.y);
